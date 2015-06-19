@@ -1,0 +1,16 @@
+citHeader("To cite unnmarkedExtra in publications use:")
+
+meta <- packageDescription("unmarkedExtra")
+year <- sub("-.*", "", meta$Date)
+note <- sprintf("R package version %s", meta$Version)
+url <- meta$URL
+
+citEntry(entry="Manual",
+	title="{UnmarkedExtra}: Enhancements for the unmarked R package",	
+	author=personList(as.person("Hanson J.O.")),
+	year=year,
+	note=note,
+	url=url,
+	textVersion = paste0("Hanson, J.O. ",year,". unmarkedExtra: Enhancements for the unmarked R package.",note,". URL ",url,".")
+)
+
