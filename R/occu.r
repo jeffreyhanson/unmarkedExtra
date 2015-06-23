@@ -185,7 +185,18 @@ occu.stan.lin=function(control) {
 				);
 		}
 	}
-			
+	
+	generated quantities {
+		int sites_occupied[nsites];
+		int number_sites_occupied;
+		real fraction_sites_occupied;
+		
+		for (i in 1:nsites)
+			sites_occupied[i] <- bernoulli_rng(psi[i]);
+		number_sites_occupied <- sum(sites_occupied);
+		fraction_sites_occupied <- number_sites_occupied / nsites;
+	}
+	
 	'	
 	)
 		
@@ -211,34 +222,26 @@ occu.stan.gp=function(control) {
 	if (is.null(control$priors)) {
 		# init list
 		control$priors=list()
-		control$pars=c()
+		control$pars=c('psi','p','number_sites_occupied','fraction_sites_occupied')
 		# set detection model priors
 		if (ncol(control$data$V)==0) {
 			control$priors$d_intercept=Normal(0,10)
 			control$pars=c(control$pars, 'd_intercept')
-		} else if (ncol(control$data$V)==1) {
-			control$priors$d_eta_sq=Cauchy(0,5)
-			control$priors$d_sigma_sq=Cauchy(0,5)
-			control$pars=c(control$pars, 'd_eta_sq', 'd_sigma_sq')
-		} else if (ncol(control$data$V)>1) {
+		} else {
 			control$priors$d_eta_sq=Cauchy(0,5)
 			control$priors$d_sigma_sq=Cauchy(0,5)
 			control$priors$d_inv_rho_sq=Cauchy(0,5)	
-			control$pars=c(control$pars, 'd_eta_sq', 'd_sigma_sq', 'd_inv_rho_sq', 'd_rho_sq')
+			control$pars=c(control$pars, 'd_eta_sq', 'd_sigma_sq', 'd_inv_rho_sq')
 		}		
 		# set occupancy model priors
 		if (ncol(control$data$X)==0) {
 			control$priors$o_intercept=Normal(0,10)
 			control$pars=c(control$pars, 'o_intercept')
-		} else if (ncol(control$data$X)==1) {
-			control$priors$o_eta_sq=Cauchy(0,5)
-			control$priors$o_sigma_sq=Cauchy(0,5)
-			control$pars=c(control$pars, 'o_eta_sq', 'o_sigma_sq')
-		} else if (ncol(control$data$X)>1) {
+		} else {
 			control$priors$o_eta_sq=Cauchy(0,5)
 			control$priors$o_sigma_sq=Cauchy(0,5)
 			control$priors$o_inv_rho_sq=Cauchy(0,5)
-			control$pars=c(control$pars, 'o_eta_sq', 'o_sigma_sq', 'o_inv_rho_sq', 'o_rho_sq')
+			control$pars=c(control$pars, 'o_eta_sq', 'o_sigma_sq', 'o_inv_rho_sq')
 		}		
 	}
 
@@ -253,18 +256,9 @@ occu.stan.gp=function(control) {
 		int<lower=0,upper=1> y[nobs]; // observations
 		int<lower=1,upper=nobs> site_starts[nsites]; // index of first observation for i\'th site
 		int<lower=1,upper=nobs> site_visits[nsites]; // index of last observation for i\'th site
-',
-	if (ncol(control$data$X)==1) {
-'		vector[nsites] X; // covariates for observation model\n'
-	} else if (ncol(control$data$X)>1) {
-'		vector[nocovs] X[nsites]; // covariates for observation model\n'	
-	},
-	if (ncol(control$data$V)==1) {
-'		vector[nobs] V; // covariates for detection model\n'
-	} else if (ncol(control$data$V)>1) {
-'		vector[nocovs] V[nobs]; // covariates for detection model\n'		
-	},
-'		
+
+		vector[nocovs] X[nsites]; // covariates for observation model
+		vector[ndcovs] V[nobs]; // covariates for detection model
 	}
 	
 	transformed data {
@@ -291,111 +285,65 @@ occu.stan.gp=function(control) {
 	}
 	
 	parameters {
-	',
+',
 	if (ncol(control$data$V)==0) {
 '		real d_intercept;'
-	} else if (ncol(control$data$V)==1) {
-'
-		real<lower=0> d_eta_sq;
-		real<lower=0> d_sigma_sq;
-		vector[nobs] logit_p;
-'
-	} else if (ncol(control$data$V)>1) {
+	} else {
 '
 		real<lower=0> d_eta_sq;
 		real<lower=0> d_inv_rho_sq[ndcovs];
 		real<lower=0> d_sigma_sq;
-		vector[nobs] logit_p;
+		vector[nsites] d_rnorm;	
 '	
 	},
 	if (ncol(control$data$X)==0) {
 '		real o_intercept;'
-	} else if (ncol(control$data$X)==1) {
-'
-		real<lower=0> o_eta_sq;
-		real<lower=0> o_sigma_sq;
-		vector[nsites] logit_psi;
-'
-	} else if (ncol(control$data$X)>1) {
+	} else {
 '
 		real<lower=0> o_eta_sq;
 		real<lower=0> o_inv_rho_sq[nocovs];
 		real<lower=0> o_sigma_sq;
-		vector[nsites] logit_psi;
+		vector[nsites] o_rnorm;
 '
 	},	
 	'
 	}
 	
 	transformed parameters{
+		vector[nsites] psi;
+		vector[nobs] p;
+		
+		
 ',
-	if (ncol(control$data$V)>1) {
-'		vector<lower=0>[ndcovs] d_rho_sq;\n'
+	if (ncol(control$data$V)>0) {
+'
+		vector<lower=0>[ndcovs] d_rho_sq;
+		vector[ndcovs] d_exp_term;
+		vector[nobs] logit_p;
+		cov_matrix[nobs] d_Sigma;
+		matrix[nsites,nsites] d_L;
+'
 	},
-	if (ncol(control$data$X)>1) {
-'		vector<lower=0>[nocovs] o_rho_sq;\n'
+	if (ncol(control$data$X)>0) {
+'
+		vector<lower=0>[nocovs] o_rho_sq;
+		vector[nocovs] o_exp_term;
+		vector[nsites] logit_psi;
+		cov_matrix[nsites] o_Sigma;
+		matrix[nsites,nsites] o_L;
+'
 	},
-	if (ncol(control$data$V)>1) {
+	if (ncol(control$data$V)==0) {
+'
+		for (i in 1:nobs)
+			p[i] <- inv_logit(d_intercept);
+'	
+	} else {
 		'
 		for (i in 1:ndcovs) {
 			d_rho_sq[i] <- inv(d_inv_rho_sq[i]);
 		}
-		'
-	},
-	if (ncol(control$data$X)>1) {
-'
-		for (i in 1:nocovs) {
-			o_rho_sq[i] <- inv(o_inv_rho_sq[i]);
-		}		
-'
-	},
-	'	
-	}
-	
-	model {
-		// local variables
-		vector[nsites] psi;
-		vector[nobs] p;		
-		vector[nsites] log_psi;
-		vector[nsites] log1m_psi;	
-	',
-	if (ncol(control$data$V)>0) {
-'		
-	vector[ndcovs] d_exp_term;
-	matrix[nobs,nobs] d_Sigma;
-'
-	},
-	if (ncol(control$data$X)>0) {
-'	
-	vector[nocovs] o_exp_term;
-	matrix[nsites,nsites] o_Sigma;
-'
-	},
-	'		/// calculate p\n',
-	if (ncol(control$data$V)==0) {
-'		for (i in 1:nobs)
-			p[i] <- inv_logit(d_intercept);
-'
-	} else if (ncol(control$data$V)==1) {
-'
-		// off-diagonal elements
-		for (i in 1:(nobs-1)) {
-			for (j in (i+1):nobs) {
-				d_Sigma[i,j] <- d_eta_sq * exp(-pow(V[i] - V[j],2));
-				d_Sigma[j,i] <- d_Sigma[i,j];
-			}
-		}
-		// diagonal elements
-		for (i in 1:nobs)
-			d_Sigma[i,i] <- d_eta_sq + d_sigma_sq;
 		
-		// sample parameters
-		logit_p ~ multi_normal(d_mu, d_Sigma);
-		for (i in 1:nobs)
-			p[i] <- inv_logit(logit_p[i]);
-'
-	} else if (ncol(control$data$V)>1) {
-'
 		// off-diagonal elements
 		for (i in 1:(nobs-1)) {
 			for (j in (i+1):nobs) {
@@ -408,38 +356,25 @@ occu.stan.gp=function(control) {
 		for (i in 1:nobs)
 			d_Sigma[i,i] <- d_eta_sq + d_sigma_sq;
 		
-		// sample parameters
-		logit_p ~ multi_normal(d_mu, d_Sigma);
+		// implies:	logit_p ~ multi_normal(d_mu, d_Sigma);
+		d_L <- cholesky_decompose(d_Sigma);
+		logit_p <- d_mu + d_L * d_rnorm;
+		
 		for (i in 1:nobs)
-			p[i] <- inv_logit(logit_p[i]);
+			p[i] <- inv_logit(d_intercept);
 '
 	},
-	'		/// calculate psi',
 	if (ncol(control$data$X)==0) {
-		'
+'			
 		for (i in 1:nsites)
 			psi[i] <- inv_logit(o_intercept);
-		'
-	} else if (ncol(control$data$X)==1) {
-		'
-		// off-diagonal elements
-		for (i in 1:(nsites-1)) {
-			for (j in (i+1):nsites) {			
-				o_Sigma[i,j] <- o_eta_sq * exp(-pow(X[i] - X[j],2));
-				o_Sigma[j,i] <- o_Sigma[i,j];
-			}
+'
+	} else {
+'
+		for (i in 1:nocovs) {
+			o_rho_sq[i] <- inv(o_inv_rho_sq[i]);
 		}
-		// diagonal elements
-		for (i in 1:nsites)
-			o_Sigma[i,i] <- 0.001;
-			
-		// sample parameters
-		logit_psi ~ multi_normal(o_mu, o_Sigma);
-		for (i in 1:nsites)
-			psi[i] <- inv_logit(logit_psi[i]);
-		'
-	} else if (ncol(control$data$X)>1) {
-		'
+		
 		// off-diagonal elements
 		for (i in 1:(nsites-1)) {
 			for (j in (i+1):nsites) {			
@@ -451,40 +386,50 @@ occu.stan.gp=function(control) {
 		// diagonal elements
 		for (i in 1:nsites)
 			o_Sigma[i,i] <- o_eta_sq + o_sigma_sq;
-			
-		// sample parameters
-		logit_psi ~ multi_normal(o_mu, o_Sigma);
+		
+		// implies:	logit_psi ~ multi_normal(o_mu, o_Sigma);
+		o_L <- cholesky_decompose(o_Sigma);
+		logit_psi <- o_mu + o_L * o_rnorm;
+		
 		for (i in 1:nsites)
 			psi[i] <- inv_logit(logit_psi[i]);
-		'
+'
 	},
-'	// priors\n',
+'		
+	}
+	
+	model {
+		// local variables
+		vector[nsites] log_psi;
+		vector[nsites] log1m_psi;	
+
+
+		//  cache log psi calculations
+		log_psi <- log(psi);
+		for (i in 1:nsites)
+			log1m_psi[i]<-log1m(psi[i]);
+
+		// priors
+',
 	if (ncol(control$data$V)==0) {
 paste0('		d_intercept ~ ',repr(control$priors$d_intercept), ';\n')
-	} else if (ncol(control$data$V)==1)  {
-		paste0(
-'		d_eta_sq ~ ', repr(control$priors$d_eta_sq), ';\n',
-'		d_sigma_sq ~ ', repr(control$priors$d_sigma_sq), ';\n'
-		)
-	} else if (ncol(control$data$V)>1)  {
+	} else {
 		paste0(
 '		d_eta_sq ~ ', repr(control$priors$d_eta_sq), ';\n',
 '		d_inv_rho_sq ~ ', repr(control$priors$d_inv_rho_sq), ';\n',
-'		d_sigma_sq ~ ', repr(control$priors$d_sigma_sq), ';\n'
+'		d_sigma_sq ~ ', repr(control$priors$d_sigma_sq), ';\n',
+'		d_rnorm ~ normal(0,1);\n'
+
 		)
 	},
 	if (ncol(control$data$X)==0) {
 paste0('		o_intercept ~ ',repr(control$priors$o_intercept), ';\n')
-	} else if (ncol(control$data$X)==1) {
-		paste0(
-'		o_eta_sq ~ ', repr(control$priors$o_eta_sq), ';\n',
-'		o_sigma_sq ~ ', repr(control$priors$o_sigma_sq), ';\n'
-		)
-	}else if (ncol(control$data$X)>1) {
+	} else {
 		paste0(
 '		o_eta_sq ~ ', repr(control$priors$o_eta_sq), ';\n',
 '		o_inv_rho_sq ~ ', repr(control$priors$o_inv_rho_sq), ';\n',
-'		o_sigma_sq ~ ', repr(control$priors$o_sigma_sq), ';\n'
+'		o_sigma_sq ~ ', repr(control$priors$o_sigma_sq), ';\n',
+'		o_rnorm ~ normal(0,1);\n'
 		)
 	},	
 	'
@@ -527,16 +472,24 @@ paste0('		o_intercept ~ ',repr(control$priors$o_intercept), ';\n')
 				);
 		}
 	}
-			
+	
+	generated quantities {
+		real sites_occupied[nsites];
+		real nsites2;
+		real number_sites_occupied;
+		real fraction_sites_occupied;
+		
+		nsites2 <- nsites;
+		for (i in 1:nsites)
+			sites_occupied[i] <- bernoulli_rng(psi[i]);
+		number_sites_occupied <- sum(sites_occupied);
+		fraction_sites_occupied <- number_sites_occupied / nsites;
+	}
+
+
 	'	
 	)
-	
-	# convert matrices to vector format if 0 or 1 covariates
-	if (ncol(control$data$V)<=1)		
-		control$data$V=c(control$data$V)	
-	if (ncol(control$data$X)<=1)
-		control$data$X=c(control$data$X)
-	
+		
 	# debugging
 	assign('control', control, envir=globalenv())
 	
