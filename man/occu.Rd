@@ -10,16 +10,16 @@ occu(formula, data, knownOcc = numeric(0), method = "BFGS",
 \arguments{
 \item{formula}{Double right-hand side formula describing covariates of detection and occupancy in that order.}
 
-\item{data}{An \link[unmarked][UnmarkedFrameOccu] object}
+\item{data}{An \code{\link[unmarked]{UnmarkedFrameOccu}} object}
 
-\item{method}{Method used to solve the model. Either "stan", or a method used by \link[optimx][optimx].}
+\item{method}{Method used to solve the model. Either "stan", or a method used by \code{\link[optimx]{optimx}}.}
 
 \item{control}{List of options to specify model fitting procedure. See Details.}
 
 \item{kwnownOcc}{Vector of sites that are known to be occupied. These should be supplied as row numbers of the y matrix, eg, c(3,8) if sites 3 and 8 were known to be occupied a priori.}
 }
 \value{
-\link[unmarkedFitOccu] object.
+\code{\link[unmarked]{unmarkedFitOccu}} object.
 }
 \description{
 This function fits the single season occupancy model of MacKenzie et al (2002).

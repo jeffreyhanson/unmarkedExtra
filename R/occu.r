@@ -6,12 +6,12 @@ NULL
 #' This function fits the single season occupancy model of MacKenzie et al (2002). 
 #'
 #' @param formula Double right-hand side formula describing covariates of detection and occupancy in that order.
-#' @param data An \link[unmarked][UnmarkedFrameOccu] object
+#' @param data An \code{\link[unmarked]{UnmarkedFrameOccu}} object
 #' @param kwnownOcc Vector of sites that are known to be occupied. These should be supplied as row numbers of the y matrix, eg, c(3,8) if sites 3 and 8 were known to be occupied a priori.
-#' @param method Method used to solve the model. Either "stan", or a method used by \link[optimx][optimx].
+#' @param method Method used to solve the model. Either "stan", or a method used by \code{\link[optimx]{optimx}}.
 #' @param control List of options to specify model fitting procedure. See Details.
 #' @export
-#' @return \link[unmarkedFitOccu] object.
+#' @return \code{\link[unmarked]{unmarkedFitOccu}} object.
 #' @author Jeffrey O. Hanson
 occu<-function(formula, data, knownOcc=numeric(0), method='BFGS', control=list()) {
 	# check data for valid inputs
