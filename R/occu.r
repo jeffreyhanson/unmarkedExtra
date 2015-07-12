@@ -90,7 +90,7 @@ occu.stan.lin=function(control) {
 	}
 	
 	## set parameters to return
-	control$pars=c('dpars', 'opars', 'psi', 'p')
+	control$pars=c('dpars', 'opars', 'psi', 'p', 'log_lik')
 	
 	## parse code
 	control$model_code=paste0('
@@ -102,7 +102,7 @@ occu.stan.lin=function(control) {
 		
 		int<lower=0,upper=1> y[nobs]; // observations
 		int<lower=1,upper=nobs> site_starts[nsites]; // index of first observation for i\'th site
-		int<lower=1,upper=nobs> site_visits[nsites]; // index of last observation for i\'th site
+		int<lower=1,upper=nobs> site_visits[nsites]; // number of observations for i\'th site
 		
 		matrix[nsites,nopars] X; // design matrix for observation model
 		matrix[nobs,ndpars] V; // design matrix for detection model
@@ -112,7 +112,6 @@ occu.stan.lin=function(control) {
 		int<lower=0> site_detections[nsites]; // number of detections per site
 		for (i in 1:nsites)
 			site_detections[i] <- sum(segment(y, site_starts[i], site_visits[i]));		
-
 	}
 	
 	parameters {
@@ -121,28 +120,26 @@ occu.stan.lin=function(control) {
 	}
 	
 	transformed parameters {
+		vector[nsites] logit_psi;
+		vector[nobs] logit_p;
+		
 		vector[nsites] psi;
 		vector[nobs] p;
 		
-		psi <- X * opars;
-		for (i in 1:nsites)
-			psi[i] <- inv_logit(psi[i]);
-				
-		p <- V * dpars;
-		for (i in 1:nobs)
-			p[i] <- inv_logit(p[i]);
-			
+		vector[nsites] log1m_psi;
+		vector[nsites] log_psi;
+
+		logit_psi <- X * opars;
+		logit_p <- V * dpars;
+
+		for (i in 1:nsites) {
+			log1m_psi[i] <- log1m(inv_logit(logit_psi[i]));		
+			log_psi[i] <- log(inv_logit(logit_psi[i]));
+		}
+		
 	}
 	
-	model {
-		// local variables
-		vector[nsites] log_psi;
-		vector[nsites] log1m_psi;
-		
-		log_psi <- log(psi);
-		for (i in 1:nsites)
-			log1m_psi[i]<-log1m(psi[i]);
-		
+	model {			
 		// priors
 		dpars ~ ',repr(control$priors$dpars),';
 		opars ~ ',repr(control$priors$opars),';
@@ -151,14 +148,14 @@ occu.stan.lin=function(control) {
 		for (i in 1:nsites) {
 			if (site_detections[i] > 0) 
 				increment_log_prob(
-					log_psi[i] + bernoulli_log(
+					log_psi[i] + bernoulli_logit_log(
 						segment(
 							y, 
 							site_starts[i],
 							site_visits[i]
 						),
 						segment(
-							p,
+							logit_p,
 							site_starts[i],
 							site_visits[i]
 						)
@@ -168,14 +165,14 @@ occu.stan.lin=function(control) {
 				increment_log_prob(
 					log_sum_exp(
 						log_psi[i] + 
-						bernoulli_log(
+						bernoulli_logit_log(
 							segment(
 								y, 
 								site_starts[i],
 								site_visits[i]
 							),
 							segment(
-								p,
+								logit_p,
 								site_starts[i],
 								site_visits[i]
 							)
@@ -183,18 +180,56 @@ occu.stan.lin=function(control) {
 						log1m_psi[i]
 					)
 				);
-		}
+		}		
+
+	
 	}
 	
 	generated quantities {
-		int sites_occupied[nsites];
-		int number_sites_occupied;
+		real sites_occupied[nsites];
+		real number_sites_occupied;
 		real fraction_sites_occupied;
-		
-		for (i in 1:nsites)
-			sites_occupied[i] <- bernoulli_rng(psi[i]);
+		vector[nobs] log_lik;
+
+		// site-level summaries
+		for (i in 1:nsites) 
+			sites_occupied[i] <- bernoulli_rng(psi[i]);		
 		number_sites_occupied <- sum(sites_occupied);
 		fraction_sites_occupied <- number_sites_occupied / nsites;
+		
+		// log-likelihood
+		for (i in 1:nsites) {
+			if (site_detections[i] > 0) 
+				log_lik[i] <- log_psi[i] + bernoulli_logit_log(
+						segment(
+							y, 
+							site_starts[i],
+							site_visits[i]
+						),
+						segment(
+							logit_p,
+							site_starts[i],
+							site_visits[i]
+						)
+					); 
+			else 
+				log_lik[i] <- log_sum_exp(
+						log_psi[i] + 
+						bernoulli_logit_log(
+							segment(
+								y, 
+								site_starts[i],
+								site_visits[i]
+							),
+							segment(
+								logit_p,
+								site_starts[i],
+								site_visits[i]
+							)
+						), 
+						log1m_psi[i]
+					);
+		}
 	}
 	
 	'	

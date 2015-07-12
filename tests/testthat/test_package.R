@@ -1,17 +1,17 @@
 library(boot)
 library(rstan)
 
-# test_that("distribution functions don't work", {
+test_that("distribution functions don't work", {
 	x1=Uniform(20,50)
 	expect_identical(repr(x1), 'uniform(20, 50)')
 	x2=Normal(0,10)
 	expect_identical(repr(x2), 'normal(0, 10)')
 	x3=Cauchy(0, 5)
 	expect_identical(repr(x3), 'cauchy(0, 5)')
-# })
+})
 
 
-# test_that("optimx solver doesn't work", {
+test_that("optimx solver doesn't work", {
 	# init data
 	data(frogs)
 	pferUMF <- unmarkedFrameOccu(pfer.bin)
@@ -29,14 +29,14 @@ library(rstan)
 	# test if answers are the same
 	expect_identical(m1@estimates,m2@estimates)
 	expect_identical(m1@opt,m2@opt)
-# })
+})
 
 
-# test_that("stan linear solver doesn't work", {
+test_that("stan linear solver doesn't work", {
 	## simulate data
 	# set params
-	n.sites=500
-	n.visits=20
+	n.sites=50
+	n.visits=10
 	o.int=2
 	o.slope=2
 	d.int=1
@@ -69,7 +69,7 @@ library(rstan)
 	m1.coef=coef(m1)
 	
 	# run using stan
-	m2=occu(~1 ~sitevar, data=testUMF, method='stan')
+	m2=occu(~1 ~sitevar, data=testUMF, method='stan', control=list(iter=4000, seed=500))
 	m2.samples=extract(m2, c('dpars','opars'))
 	m2.coef=structure(
 		c(colMeans(m2.samples[[2]]), mean(m2.samples[[1]][[1]])),
@@ -78,7 +78,7 @@ library(rstan)
 	
 	# test that simulated parameters have been derived using optim and stan
 	expect_equal(round(m1.coef), round(m2.coef), c(o.int, o.slope, d.int))
-# })
+})
 
 test_that("stan gp solver doesn't work", {
 	## simulate data
