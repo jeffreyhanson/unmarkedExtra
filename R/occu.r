@@ -39,13 +39,24 @@ occu.stan=function(formula, data, knownOcc, method, control) {
 		control$gp=FALSE
 	control$model_name='occupancy-detection model'
 	control$data$list=list()
+
+	assign('formula', formula, envir=globalenv())
+	assign('control', control, envir=globalenv())
+	assign('data', data, envir=globalenv())
 	
 	## preliminary processing
 	# prepare data
 	control$data$y<-c(t(unmarked:::truncateToBinary(data@y)))
-	control$data$X<-model.matrix(as.formula(paste("~", formula[3], sep="")), data@siteCovs)
-	control$data$V<-model.matrix(as.formula(formula[[2]]), data@obsCovs)
-
+	if (identical(as.formula(paste("~", formula[3], sep="")), ~ 1)) {
+		control$data$X <- model.matrix(as.formula(paste("~", formula[3], sep="")), data.frame(x=rep(nrow(data@y))))
+	} else {
+		control$data$X<-model.matrix(as.formula(paste("~", formula[3], sep="")), data@siteCovs)
+	}
+	if (identical(as.formula(formula[[2]]), ~ 1)) {
+		control$data$V <- model.matrix(as.formula(formula[[2]]), data.frame(x=seq_len(length(data@y))))
+	} else {
+		control$data$V<-model.matrix(as.formula(formula[[2]]), data@obsCovs)
+	}
 	# handle NA values
 	if (any(is.na(control$data$y))) {
 		# remove sites which have never been visited
