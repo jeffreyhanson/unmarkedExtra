@@ -10,7 +10,6 @@ test_that("distribution functions don't work", {
 	expect_identical(repr(x3), 'cauchy(0, 5)')
 })
 
-
 test_that("optimx solver doesn't work", {
 	# init data
 	data(frogs)
