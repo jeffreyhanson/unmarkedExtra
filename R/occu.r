@@ -38,17 +38,12 @@ occu.stan=function(formula, data, knownOcc, method, control) {
 	if (is.null(control$gp))
 		control$gp=FALSE
 	control$model_name='occupancy-detection model'
-	control$data$list=list()
-
-	assign('formula', formula, envir=globalenv())
-	assign('control', control, envir=globalenv())
-	assign('data', data, envir=globalenv())
-	
+	control$data=list()
 	## preliminary processing
 	# prepare data
 	control$data$y<-c(t(unmarked:::truncateToBinary(data@y)))
 	if (identical(as.formula(paste("~", formula[3], sep="")), ~ 1)) {
-		control$data$X <- model.matrix(as.formula(paste("~", formula[3], sep="")), data.frame(x=rep(nrow(data@y))))
+		control$data$X <- model.matrix(as.formula(paste("~", formula[3], sep="")), data.frame(x=seq_len(nrow(data@y))))
 	} else {
 		control$data$X<-model.matrix(as.formula(paste("~", formula[3], sep="")), data@siteCovs)
 	}
@@ -68,16 +63,15 @@ occu.stan=function(formula, data, knownOcc, method, control) {
 		control$data$V<-control$data$V[which(!is.na(control$data$y)),,drop=FALSE]
 		control$data$y<-control$data$y[which(!is.na(control$data$y))]
 	}
-	
 	# calculate numbers for stan
 	control$data$nobs=length(control$data$y) # number observations total
 	control$data$nsites=nrow(control$data$X) # number of sites
 	obssites=rep(seq_len(nrow(data@y)), each=obsNum(data))[which(!is.na(c(t(data@y))))] # number observations per site
-	control$data$site_starts=unname(tapply(X=seq_along(obssites), INDEX=obssites, FUN=min))
+	control$data$site_starts=as.integer(unname(tapply(X=seq_along(obssites), INDEX=obssites, FUN=min)))
 	control$data$site_visits=as.vector(table(obssites))
 	control$data$nopars=ncol(control$data$X) # number observation parameters
 	control$data$ndpars=ncol(control$data$V) # number detection parameters
-	## main processing
+	## main processing	
 	if (control$gp) {
 		return(
 			occu.stan.gp(control)
@@ -101,7 +95,7 @@ occu.stan.lin=function(control) {
 	}
 	
 	## set parameters to return
-	control$pars=c('dpars', 'opars', 'psi', 'p', 'log_lik')
+	control$pars=c('dpars', 'opars', 'psi', 'p', 'log_lik','sites_occupied', 'number_sites_occupied','fraction_sites_occupied')
 	
 	## parse code
 	control$model_code=paste0('
@@ -200,7 +194,7 @@ occu.stan.lin=function(control) {
 		real sites_occupied[nsites];
 		real number_sites_occupied;
 		real fraction_sites_occupied;
-		vector[nobs] log_lik;
+		vector[nsites] log_lik;
 
 		// site-level summaries
 		for (i in 1:nsites) 
@@ -250,7 +244,7 @@ occu.stan.lin=function(control) {
 	return(
 		do.call(
 			stan,
-			control
+			control[!names(control) %in% c('gp','priors')]
 		)
 	)
 }

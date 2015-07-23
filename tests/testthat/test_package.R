@@ -31,6 +31,12 @@ test_that("optimx solver doesn't work", {
 	expect_identical(m1@opt,m2@opt)
 })
 
+test_that("stan linear solver fails with intercept only model", {
+	testUMF=unmarkedFrameOccu(
+		y=matrix(sample(c(0,1), 20, replace=T) , ncol=5, nrow=20)
+	)
+	ret=occu(~1 ~1, data=testUMF, method="stan")
+})
 
 test_that("stan linear solver doesn't work", {
 	## simulate data
