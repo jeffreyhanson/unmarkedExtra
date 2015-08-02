@@ -618,10 +618,9 @@ occu.optimx=function(formula, data, knownOcc, method, control) {
 	control$method=method
 	control$par=control$starts
 	fm <- do.call(
-		optim,
+		optimx,
 		control
 	)
-	assign('fm', fm, envir=globalenv())
 	if (control$hessian) {
 		tryCatch(covMat <- solve(fm$hessian), error = function(x) stop(simpleError("Hessian is singular.  Try providing starting values or using fewer covariates.")))
 	} else {
