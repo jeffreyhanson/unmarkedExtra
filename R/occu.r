@@ -282,13 +282,19 @@ occu.stan.test.lin=function(control) {
 	'	
 	)
 
-	assign('control', control, envir=globalenv())
-
+	if (is.null(options()$occu.stan.test.lin)) {
+		options(occu.stan.test.lin=stan_model(model_code = control$model_code)	
+	}
+	
+	
 	## run model
 	return(
 		do.call(
-			stan,
-			control[!names(control) %in% c('gp','priors')]
+			sampling,
+			append(
+				list(object=options()$occu.stan.test.lin),
+				control[!names(control) %in% c('gp','priors','model_code')]
+			)
 		)
 	)
 }
