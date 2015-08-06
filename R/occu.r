@@ -40,7 +40,6 @@ occu.stan=function(formula, data, test.data, knownOcc, method, control) {
 	## set default controls
 	if (is.null(control$gp))
 		control$gp=FALSE
-	control$model_name='occupancy-detection model'
 	control$data=list(
 		train.data=convertUMF(formula, data, knownOcc, control),
 		test.data=convertUMF(formula, test.data, knownOcc, control)
