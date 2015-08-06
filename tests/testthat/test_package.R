@@ -10,7 +10,7 @@ test_that("distribution functions don't work", {
 	expect_identical(repr(x3), 'cauchy(0, 5)')
 })
 
-test_that("optimx solver doesn't work", {
+test_that("nloptr solver doesn't work", {
 	# init data
 	data(frogs)
 	pferUMF <- unmarkedFrameOccu(pfer.bin)
@@ -23,7 +23,7 @@ test_that("optimx solver doesn't work", {
 	
 	# run using unmarkedExtra
 	set.seed(500)
-	m2=unmarkedExtra::occu(~ obsvar1 ~ 1, pferUMF, method='BFGS')
+	m2=unmarkedExtra::occu(~ obsvar1 ~ 1, pferUMF, method='NLOPT_LN_SBPLX')
 	
 	# test if answers are the same
 	expect_identical(m1@estimates,m2@estimates)
@@ -63,26 +63,39 @@ test_that("stan linear solver doesn't work", {
 	}))
 	
 	# generate binary predictions
-	testUMF=unmarkedFrameOccu(
+	trainUMF=unmarkedFrameOccu(
 			y=visit.obs,
 			siteCovs=o.covs,
 			obsCovs=d.covs
 	)
+	
+	testUMF=unmarkedFrameOccu(
+			y=visit.obs[1:10,,drop=FALSE],
+			siteCovs=o.covs[1:10,,drop=FALSE],
+			obsCovs=d.covs[1:100,,drop=FALSE]
+	)
 
 	# run using optim
-	m1=occu(~1 ~sitevar, data=testUMF, method='BFGS')
+	m1=unmarked::occu(~1 ~sitevar, data=trainUMF, method='BFGS')
 	m1.coef=coef(m1)
 	
 	# run using stan
-	m2=occu(~1 ~sitevar, data=testUMF, method='stan', control=list(iter=4000, seed=500))
+	m2=unmarkedExtra::occu(~1 ~sitevar, data=trainUMF, method='stan', control=list(iter=2000, seed=500))
 	m2.samples=extract(m2, c('dpars','opars'))
 	m2.coef=structure(
 		c(colMeans(m2.samples[[2]]), mean(m2.samples[[1]][[1]])),
 		.Names=names(m1.coef)
 	)
 	
+	m3=unmarkedExtra::occu(~1 ~sitevar, data=trainUMF, test.data=testUMF, method='stan', control=list(iter=2000, seed=500))
+	m3.samples=extract(m3, c('dpars','opars'))
+	m3.coef=structure(
+		c(colMeans(m3.samples[[2]]), mean(m3.samples[[1]][[1]])),
+		.Names=names(m1.coef)
+	)
+
 	# test that simulated parameters have been derived using optim and stan
-	expect_equal(round(m1.coef), round(m2.coef), c(o.int, o.slope, d.int))
+	expect_equal(round(m1.coef), round(m2.coef), round(m3.coef), c(o.int, o.slope, d.int))
 })
 
 test_that("stan gp solver doesn't work", {

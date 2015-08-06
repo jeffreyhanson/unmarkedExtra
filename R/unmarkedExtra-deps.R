@@ -1,5 +1,5 @@
 #' @importFrom rstan stan
-#' @importFrom optimx optimx
+#' @importFrom nloptr nloptr
 
 #' @import unmarked
 NULL

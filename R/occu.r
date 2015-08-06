@@ -8,80 +8,291 @@ NULL
 #' @param formula Double right-hand side formula describing covariates of detection and occupancy in that order.
 #' @param data An \code{\link[unmarked]{UnmarkedFrameOccu}} object
 #' @param kwnownOcc Vector of sites that are known to be occupied. These should be supplied as row numbers of the y matrix, eg, c(3,8) if sites 3 and 8 were known to be occupied a priori.
-#' @param method Method used to solve the model. Either "stan", or a method used by \code{\link[optimx]{optimx}}.
+#' @param method Method used to solve the model. Either "stan", or a method used by \code{\link[nloptr]{nloptr}}.
 #' @param control List of options to specify model fitting procedure. See Details.
 #' @export
 #' @return \code{\link[unmarked]{unmarkedFitOccu}} object.
 #' @author Jeffrey O. Hanson
-occu<-function(formula, data, knownOcc=numeric(0), method='BFGS', control=list()) {
+occu<-function(formula, data, test.data=NULL, knownOcc=numeric(0), method='BFGS', control=list()) {
 	# check data for valid inputs
 	if (!is(data, "unmarkedFrameOccu")) 
-		stop("Data is not an unmarkedFrameOccu object.")
+		stop("data argument is not an unmarkedFrameOccu object.")
+	if (!is(test.data, "unmarkedFrameOccu") && !is.null(test.data)) 
+		stop("test argument is not an unmarkedFrameOccu object.")
+		
 	# solve model and return results
 	if (method=='stan') {
 		return(
 			occu.stan(
-				formula, data, knownOcc, method, control
+				formula, data, test.data, knownOcc, method, control
 			)
 		)
 	} else {
 		return(
-			occu.optimx(
+			occu.nloptr(
 				formula, data, knownOcc, method, control
 			)
 		)
 	}
 }
 
-occu.stan=function(formula, data, knownOcc, method, control) {
+occu.stan=function(formula, data, test.data, knownOcc, method, control) {
 	## set default controls
 	if (is.null(control$gp))
 		control$gp=FALSE
 	control$model_name='occupancy-detection model'
-	control$data=list()
-	## preliminary processing
-	# prepare data
-	control$data$y<-c(t(unmarked:::truncateToBinary(data@y)))
-	if (identical(as.formula(paste("~", formula[3], sep="")), ~ 1)) {
-		control$data$X <- model.matrix(as.formula(paste("~", formula[3], sep="")), data.frame(x=seq_len(nrow(data@y))))
-	} else {
-		control$data$X<-model.matrix(as.formula(paste("~", formula[3], sep="")), data@siteCovs)
-	}
-	if (identical(as.formula(formula[[2]]), ~ 1)) {
-		control$data$V <- model.matrix(as.formula(formula[[2]]), data.frame(x=seq_len(length(data@y))))
-	} else {
-		control$data$V<-model.matrix(as.formula(formula[[2]]), data@obsCovs)
-	}
-	# handle NA values
-	if (any(is.na(control$data$y))) {
-		# remove sites which have never been visited
-		is.dets.missing<-rowSums(!is.na(data@y))
-		if (any(is.dets.missing==0)) {
-			control$data$X<-control$X[which(is.dets.missing>0),]
-		}
-		# remove missing observations from data
-		control$data$V<-control$data$V[which(!is.na(control$data$y)),,drop=FALSE]
-		control$data$y<-control$data$y[which(!is.na(control$data$y))]
-	}
-	# calculate numbers for stan
-	control$data$nobs=length(control$data$y) # number observations total
-	control$data$nsites=nrow(control$data$X) # number of sites
-	obssites=rep(seq_len(nrow(data@y)), each=obsNum(data))[which(!is.na(c(t(data@y))))] # number observations per site
-	control$data$site_starts=as.integer(unname(tapply(X=seq_along(obssites), INDEX=obssites, FUN=min)))
-	control$data$site_visits=as.vector(table(obssites))
-	control$data$nopars=ncol(control$data$X) # number observation parameters
-	control$data$ndpars=ncol(control$data$V) # number detection parameters
+	control$data=list(
+		train.data=convertUMF(formula, data, knownOcc, control),
+		test.data=convertUMF(formula, test.data, knownOcc, control)
+	)
+	
 	## main processing	
 	if (control$gp) {
 		return(
 			occu.stan.gp(control)
 		)
 	} else {
-		return(
-			occu.stan.lin(control)
-		)
+		if (is.null(test.data)) {
+			
+			control$data=control$data$train.data
+			return(occu.stan.lin(control))
+		} else {
+			return(occu.stan.test.lin(control))
+		}
 	}
 }
+
+occu.stan.test.lin=function(control) {
+	## set priors
+	if (is.null(control$priors)) {
+		control$priors=list(
+			opars=Normal(0,10),
+			dpars=Normal(0,10),
+			psi_mean=Uniform(0,1),
+			p_mean=Uniform(0,1)
+		)
+	}
+	
+	# set pars
+	names(control$data$train.data)=paste0(names(control$data$train.data), '_train')
+	names(control$data$test.data)=paste0(names(control$data$test.data), '_test')
+	control$data=append(control$data, control$data$train.data)
+	control$data=append(control$data, control$data$test.data)
+	control$data$nopars=control$data$nopars_train
+	control$data$ndpars=control$data$ndpars_train
+	control$data=control$data[-which(names(control$data) %in% c('train.data', 'test.data', 'nopars_train', 'nopars_test','ndpars_train', 'ndpars_test'))]
+	
+	## set parameters to return
+	if (is.null(control$pars))
+		control$pars=c(
+			'log_lik',
+			'dpars',
+			'opars',
+			'psi_train',
+			'p_train',
+			'sites_occupied_train',
+			'number_sites_occupied_train',
+			'fraction_sites_occupied_train',
+			'psi_test',
+			'p_test',
+			'sites_occupied_test',
+			'number_sites_occupied_test',
+			'fraction_sites_occupied_test'
+		)
+	
+	## parse code
+	control$model_code=paste0('
+	data {
+		int<lower=0> nobs_train; // number of total training observations
+		int<lower=0> nsites_train; // number of training sites
+
+		int<lower=0> nobs_test; // number of total test observations
+		int<lower=0> nsites_test; // number of test sites
+
+		int<lower=0> nopars; // number of parameters for observation model
+		int<lower=0> ndpars; // number of parameters for detection model
+		
+		int<lower=0,upper=1> y_train[nobs_train]; // observations
+		int<lower=1,upper=nobs_train> site_starts_train[nsites_train]; // index of first observation for i\'th site
+		int<lower=1,upper=nobs_train> site_visits_train[nsites_train]; // number of observations for i\'th site
+		
+		matrix[nsites_train,nopars] X_train; // design matrix for observation model
+		matrix[nobs_train,ndpars] V_train; // design matrix for detection model
+
+		matrix[nsites_test,nopars] X_test; // design matrix for observation model
+		matrix[nobs_test,ndpars] V_test; // design matrix for detection model
+	}
+	
+	transformed data {
+		int<lower=0> site_detections_train[nsites_train]; // number of detections per site
+		for (i in 1:nsites_train)
+			site_detections_train[i] <- sum(
+				segment(
+					y_train,
+					site_starts_train[i],
+					site_visits_train[i]
+				)
+			);
+	}
+	
+	parameters {
+		vector[ndpars] dpars;
+		vector[nopars] opars;
+	}
+	
+	transformed parameters {
+		vector[nsites_train] logit_psi_train;
+		vector[nobs_train] logit_p_train;
+		vector[nsites_train] psi_train;
+		
+		vector[nsites_train] log1m_psi_train;
+		vector[nsites_train] log_psi_train;
+	
+		logit_psi_train <- X_train * opars;
+		logit_p_train <- V_train * dpars;
+		
+		for (i in 1:nsites_train) {
+			psi_train[i] <- inv_logit(logit_psi_train[i]);
+			log1m_psi_train[i] <- log1m(psi_train[i]);
+		}
+		log_psi_train <- log(psi_train);
+	}
+	
+	model {
+		// priors
+		dpars ~ ',repr(control$priors$dpars),';
+		opars ~ ',repr(control$priors$opars),';
+
+		// likelihood
+		for (i in 1:nsites_train) {
+			if (site_detections_train[i] > 0)
+				increment_log_prob(
+					log_psi_train[i] + bernoulli_logit_log(
+						segment(
+							y_train, 
+							site_starts_train[i],
+							site_visits_train[i]
+						),
+						segment(
+							logit_p_train,
+							site_starts_train[i],
+							site_visits_train[i]
+						)
+					)
+				); 
+			else 
+				increment_log_prob(
+					log_sum_exp(
+						log_psi_train[i] + 
+						bernoulli_logit_log(
+							segment(
+								y_train, 
+								site_starts_train[i],
+								site_visits_train[i]
+							),
+							segment(
+								logit_p_train,
+								site_starts_train[i],
+								site_visits_train[i]
+							)
+						), 
+						log1m_psi_train[i]
+					)
+				);
+		}
+	}
+	
+	generated quantities {
+		vector[nsites_test] logit_psi_test;
+		vector[nobs_test] logit_p_test;	
+
+		real sites_occupied_test[nsites_test];
+		real number_sites_occupied_test;
+		real fraction_sites_occupied_test;
+
+		vector[nsites_test] psi_test;
+		vector[nobs_test] p_test;
+		
+		vector[nobs_train] p_train;	
+		real sites_occupied_train[nsites_train];
+		real number_sites_occupied_train;
+		real fraction_sites_occupied_train;
+		
+		vector[nsites_train] log_lik;
+	
+		// calculate p_train
+		for (i in 1:nobs_train)
+			p_train[i] <- inv_logit(logit_p_train[i]);
+	
+		// calculate psi_test and p_test
+		logit_psi_test <- X_test * opars;
+		logit_p_test <- V_test * dpars;
+		
+		for (i in 1:nsites_test)
+			psi_test[i] <- inv_logit(logit_psi_test[i]);
+		for (i in 1:nobs_test)
+			p_test[i] <- inv_logit(logit_p_test[i]);
+	
+		// site-level summaries
+		for (i in 1:nsites_train)
+			sites_occupied_train[i] <- bernoulli_rng(psi_train[i]);
+		number_sites_occupied_train <- sum(sites_occupied_train);
+		fraction_sites_occupied_train <- number_sites_occupied_train / nsites_train;
+			
+		for (i in 1:nsites_test)
+			sites_occupied_test[i] <- bernoulli_rng(psi_test[i]);
+		number_sites_occupied_test <- sum(sites_occupied_test);
+		fraction_sites_occupied_test <- number_sites_occupied_test / nsites_test;
+			
+		// log-likelihood
+		for (i in 1:nsites_train) {
+			if (site_detections_train[i] > 0) 
+				log_lik[i] <- log_psi_train[i] + bernoulli_logit_log(
+						segment(
+							y_train, 
+							site_starts_train[i],
+							site_visits_train[i]
+						),
+						segment(
+							logit_p_train,
+							site_starts_train[i],
+							site_visits_train[i]
+						)
+					); 
+			else 
+				log_lik[i] <- log_sum_exp(
+						log_psi_train[i] + 
+						bernoulli_logit_log(
+							segment(
+								y_train, 
+								site_starts_train[i],
+								site_visits_train[i]
+							),
+							segment(
+								logit_p_train,
+								site_starts_train[i],
+								site_visits_train[i]
+							)
+						), 
+						log1m_psi_train[i]
+					);
+		}
+	}
+	
+	'	
+	)
+
+	assign('control', control, envir=globalenv())
+
+	## run model
+	return(
+		do.call(
+			stan,
+			control[!names(control) %in% c('gp','priors')]
+		)
+	)
+}
+
 
 occu.stan.lin=function(control) {
 	## set priors
@@ -101,9 +312,10 @@ occu.stan.lin=function(control) {
 	control$model_code=paste0('
 	data {
 		int<lower=0> nobs; // number of total observations
+		int<lower=0> nsites; // number of sites
+		
 		int<lower=0> nopars; // number of parameters for observation model
 		int<lower=0> ndpars; // number of parameters for detection model
-		int<lower=0> nsites; // number of sites
 		
 		int<lower=0,upper=1> y[nobs]; // observations
 		int<lower=1,upper=nobs> site_starts[nsites]; // index of first observation for i\'th site
@@ -247,8 +459,6 @@ occu.stan.lin=function(control) {
 	'	
 	)
 	
-	assign('control', control, envir=globalenv())
-		
 	## run model
 	return(
 		do.call(
@@ -553,7 +763,7 @@ paste0('		o_intercept ~ ',repr(control$priors$o_intercept), ';\n')
 
 }
 
-occu.optimx=function(formula, data, knownOcc, method, control) {
+occu.nloptr=function(formula, data, knownOcc, method, control) {
 	# set default controls
 	if (is.null(control$engine))
 		control$engine<-'C'
@@ -596,13 +806,13 @@ occu.optimx=function(formula, data, knownOcc, method, control) {
 	nd <- ifelse(rowSums(y, na.rm = TRUE) == 0, 1, 0) # number of sites where spp not detected
 	# main processing
 	if (identical(control$engine, "C")) {
-		control$fn <- function(params, ...) {
+		control$eval_f <- function(params) {
 			beta.psi <- params[1:nOP]
 			beta.p <- params[(nOP + 1):nP]
 			.Call("nll_occu", yvec, X, V, beta.psi, beta.p, nd, knownOccLog, navec, X.offset, V.offset, PACKAGE = "unmarked")
 		}
 	} else {
-		control$fn <- function(params, ...) {
+		control$eval_f <- function(params) {
 			psi <- plogis(X %*% params[1:nOP] + X.offset)
 			psi[knownOccLog] <- 1
 			pvec <- plogis(V %*% params[(nOP + 1):nP] + V.offset)
@@ -615,19 +825,20 @@ occu.optimx=function(formula, data, knownOcc, method, control) {
 	}
 	if (is.null(control$starts))
 		control$starts <- rep(0, nP)
-	control$method=method
-	control$par=control$starts
+	control$opts=list(algorithm=method, xtol_rel=1.0e-4, maxeval=100000)
+	control$x0=control$starts
 	fm <- do.call(
-		optimx,
-		control
+		nloptr,
+		control[!names(control) %in% c('engine', 'hessian', 'starts')]
 	)
+		
 	if (control$hessian) {
-		tryCatch(covMat <- solve(fm$hessian), error = function(x) stop(simpleError("Hessian is singular.  Try providing starting values or using fewer covariates.")))
+		tryCatch(covMat <- solve(optimHess(fm$solution, control$eval_f)), error = function(x) stop(simpleError("Hessian is singular.  Try providing starting values or using fewer covariates.")))
 	} else {
 		covMat <- matrix(NA, nP, nP)
 	}
-	ests <- fm$par
-	fmAIC <- 2 * fm$value + 2 * nP
+	ests <- fm$solution
+	fmAIC <- 2 * fm$objective + 2 * nP
 	names(ests) <- c(occParms, detParms)
 	state <- unmarked:::unmarkedEstimate(
 		name = "Occupancy",
@@ -655,9 +866,9 @@ occu.optimx=function(formula, data, knownOcc, method, control) {
 		sitesRemoved = designMats$removed.sites, 
 		estimates = estimateList,
 		AIC = fmAIC,
-		opt = fm,
-		negLogLike = fm$value, 
-		nllFun = control$fn,
+		opt = list(nloptr=fm, convergence=fm$status),
+		negLogLike = fm$objective, 
+		nllFun = control$eval_f,
 		knownOcc = knownOccLog
 	)
 	return(umfit)

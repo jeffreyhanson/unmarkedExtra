@@ -12,7 +12,7 @@ occu(formula, data, knownOcc = numeric(0), method = "BFGS",
 
 \item{data}{An \code{\link[unmarked]{UnmarkedFrameOccu}} object}
 
-\item{method}{Method used to solve the model. Either "stan", or a method used by \code{\link[optimx]{optimx}}.}
+\item{method}{Method used to solve the model. Either "stan", or a method used by \code{\link[nloptr]{nloptr}}.}
 
 \item{control}{List of options to specify model fitting procedure. See Details.}
 
