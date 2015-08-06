@@ -283,7 +283,7 @@ occu.stan.test.lin=function(control) {
 	)
 
 	if (is.null(options()$occu.stan.test.lin)) {
-		options(occu.stan.test.lin=stan_model(model_code = control$model_code)	
+		options(occu.stan.test.lin=stan_model(model_code=control$model_code))
 	}
 	
 	
