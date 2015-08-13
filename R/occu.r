@@ -830,7 +830,7 @@ occu.nloptr=function(formula, data, knownOcc, method, control) {
 	}
 	if (is.null(control$starts))
 		control$starts <- rep(0, nP)
-	control$opts=list(algorithm=method, xtol_rel=1.0e-4, maxeval=100000)
+	control$opts=list(algorithm=method, xtol_rel=1.0e-10, maxeval=100000)
 	control$x0=control$starts
 	fm <- do.call(
 		nloptr,
@@ -838,6 +838,11 @@ occu.nloptr=function(formula, data, knownOcc, method, control) {
 	)
 		
 	if (control$hessian) {
+	
+		assign('fm', fm, envir=globalenv())
+		assign('control', control, envir=globalenv())
+		
+		
 		tryCatch(covMat <- solve(optimHess(fm$solution, control$eval_f)), error = function(x) stop(simpleError("Hessian is singular.  Try providing starting values or using fewer covariates.")))
 	} else {
 		covMat <- matrix(NA, nP, nP)

@@ -23,7 +23,7 @@ test_that("nloptr solver doesn't work", {
 	
 	# run using unmarkedExtra
 	set.seed(500)
-	m2=unmarkedExtra::occu(~ obsvar1 ~ 1, pferUMF, method='NLOPT_LN_SBPLX')
+	m2=unmarkedExtra::occu(~ obsvar1 ~ 1, pferUMF, method='NLOPT_LN_NEWUOA')
 	
 	# test if answers are the same
 	expect_identical(m1@estimates,m2@estimates)
