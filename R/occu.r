@@ -156,7 +156,7 @@ occu.stan.test.horseshoe.lin=function(control) {
 				
 				// calculate z-scored values
 				for (j in 1:nsites_train) X_train_std[j,i] <- (X_train[j,i] - X_train_means[i]) / X_train_sds[i];
-				for (j in 1:nsites_test) X_test_std[j,i] <- (X_test[j,i] - X_train_means[i]) / X_train_means[i];
+				for (j in 1:nsites_test) X_test_std[j,i] <- (X_test[j,i] - X_train_means[i]) / X_train_sds[i];
 			}
 		}
 		
@@ -175,8 +175,8 @@ occu.stan.test.horseshoe.lin=function(control) {
 				V_train_sds[i] <- sd(col(V_train, i));
 
 				// calculate z-scored values
-				for (j in 1:nsites_train) V_train_std[j,i] <- (V_train[j,i] - V_train_means[i]) / V_train_sds[i];
-				for (j in 1:nsites_test) V_test_std[j,i] <- (V_test[j,i] - V_train_means[i]) / V_train_sds[i];
+				for (j in 1:nobs_train) V_train_std[j,i] <- (V_train[j,i] - V_train_means[i]) / V_train_sds[i];
+				for (j in 1:nobs_test) V_test_std[j,i] <- (V_test[j,i] - V_train_means[i]) / V_train_sds[i];
 			}
 		}
 	}
@@ -435,7 +435,7 @@ occu.stan.test.ols.lin=function(control) {
 				
 				// calculate z-scored values
 				for (j in 1:nsites_train) X_train_std[j,i] <- (X_train[j,i] - X_train_means[i]) / X_train_sds[i];
-				for (j in 1:nsites_test) X_test_std[j,i] <- (X_test[j,i] - X_train_means[i]) / X_train_means[i];
+				for (j in 1:nsites_test) X_test_std[j,i] <- (X_test[j,i] - X_train_means[i]) / X_train_sds[i];
 			}
 		}
 		
@@ -454,8 +454,8 @@ occu.stan.test.ols.lin=function(control) {
 				V_train_sds[i] <- sd(col(V_train, i));
 
 				// calculate z-scored values
-				for (j in 1:nsites_train) V_train_std[j,i] <- (V_train[j,i] - V_train_means[i]) / V_train_sds[i];
-				for (j in 1:nsites_test) V_test_std[j,i] <- (V_test[j,i] - V_train_means[i]) / V_train_sds[i];
+				for (j in 1:nobs_train) V_train_std[j,i] <- (V_train[j,i] - V_train_means[i]) / V_train_sds[i];
+				for (j in 1:nobs_test) V_test_std[j,i] <- (V_test[j,i] - V_train_means[i]) / V_train_sds[i];
 			}
 		}
 	}
