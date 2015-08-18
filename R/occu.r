@@ -202,7 +202,7 @@ occu.stan.test.horseshoe.lin=function(control) {
 			vector[nsites_train] psi_train;
 
 			// calculate opars using matt trick
-			opars <- ornorm // .* olambda * otau;
+			opars <- ornorm; // .* olambda * otau;
 			
 			logit_psi_train <- X_train * opars;
 			logit_p_train <- V_train * dpars;
