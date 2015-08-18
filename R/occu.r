@@ -121,7 +121,7 @@ occu.stan.test.horseshoe.lin=function(control) {
 	
 	transformed data {
 		// declare variables
-		int<lower=0> site_detections_train[nsites_train]; // number of detections per training site		
+		int<lower=0> site_detections_train[nsites_train]; // number of detections per training si
 
 //		vector[nopars] X_train_means;
 //		vector[nopars] X_train_sds;
@@ -186,8 +186,8 @@ occu.stan.test.horseshoe.lin=function(control) {
 	parameters {
 		vector[ndpars] dpars;
 		vector[nopars] ornorm;
-		real<lower=0> otau;
-		vector<lower=0>[nopars] olambda;
+		// real<lower=0> otau;
+		// vector<lower=0>[nopars] olambda;
 	}
 	
 	transformed parameters {
@@ -202,7 +202,7 @@ occu.stan.test.horseshoe.lin=function(control) {
 			vector[nsites_train] psi_train;
 
 			// calculate opars using matt trick
-			// opars <- ornorm; // .* olambda * otau;
+//			opars <- ornorm .* olambda * otau;
 			
 			logit_psi_train <- X_train * ornorm;
 			logit_p_train <- V_train * dpars;
@@ -328,9 +328,9 @@ occu.stan.test.horseshoe.lin=function(control) {
 	'	
 	)
 
-	if (is.null(options()$occu.stan.test.horseshoe.lin)) {
+	# if (is.null(options()$occu.stan.test.horseshoe.lin)) {
 		options(occu.stan.test.horseshoe.lin=stan_model(model_code=control$model_code))
-	}
+	# }
 	
 	
 	## run model
