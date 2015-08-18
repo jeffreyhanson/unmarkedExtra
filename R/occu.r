@@ -122,14 +122,14 @@ occu.stan.test.horseshoe.lin=function(control) {
 	transformed data {
 		// declare variables
 		int<lower=0> site_detections_train[nsites_train]; // number of detections per training site		
-		vector[nopars] X_train_means;
-		vector[nopars] X_train_sds;
-		vector[ndpars] V_train_means;
-		vector[ndpars] V_train_sds;
-		matrix[nsites_train,nopars] X_train_std;
-		matrix[nobs_train,ndpars] V_train_std;
-		matrix[nsites_test,nopars] X_test_std;
-		matrix[nobs_test,ndpars] V_test_std;
+		// vector[nopars] X_train_means;
+		// vector[nopars] X_train_sds;
+		// vector[ndpars] V_train_means;
+		// vector[ndpars] V_train_sds;
+		// matrix[nsites_train,nopars] X_train_std;
+		// matrix[nobs_train,ndpars] V_train_std;
+		// matrix[nsites_test,nopars] X_test_std;
+		// matrix[nobs_test,ndpars] V_test_std;
 		
 		// calculate number of detections per training site
 		for (i in 1:nsites_train)
@@ -143,43 +143,43 @@ occu.stan.test.horseshoe.lin=function(control) {
 		
 		/// standardise site-level covariates
 		// first column is assumed to contain the intercept
-		for (i in 1:nsites_train) X_train_std[i,1] <- X_train[i,1];
-		for (i in 1:nsites_test) X_test_std[i,1] <- X_test[i,1];
-		X_train_means[1] <- 1;
-		X_train_sds[1] <- 1;
+		// for (i in 1:nsites_train) X_train_std[i,1] <- X_train[i,1];
+		// for (i in 1:nsites_test) X_test_std[i,1] <- X_test[i,1];
+		// X_train_means[1] <- 1;
+		//  X_train_sds[1] <- 1;
 		// z-score remaining columns
-		if (nopars > 1) {
-			for (i in 2:nopars) {
-				// calculate means + sds
-				X_train_means[i] <- mean(col(X_train, i));
-				X_train_sds[i] <- sd(col(X_train, i));
-				
+		// if (nopars > 1) {
+// 			for (i in 2:nopars) {
+// 				// calculate means + sds
+// 				X_train_means[i] <- mean(col(X_train, i));
+// 				X_train_sds[i] <- sd(col(X_train, i));
+// 				
 				// calculate z-scored values
-				for (j in 1:nsites_train) X_train_std[j,i] <- (X_train[j,i] - X_train_means[i]) / X_train_sds[i];
-				for (j in 1:nsites_test) X_test_std[j,i] <- (X_test[j,i] - X_train_means[i]) / X_train_sds[i];
-			}
-		}
+// 				for (j in 1:nsites_train) X_train_std[j,i] <- (X_train[j,i] - X_train_means[i]) / X_train_sds[i];
+// 				for (j in 1:nsites_test) X_test_std[j,i] <- (X_test[j,i] - X_train_means[i]) / X_train_sds[i];
+// 			}
+// 		}
 		
 		/// standardise observation-level covariates
 		// first column is assumed to contain the intercept
-		for (i in 1:nobs_train) V_train_std[i,1] <- V_train[i,1];
-		for (i in 1:nobs_test) V_test_std[i,1] <- V_test[i,1];
-		V_train_means[1] <- 1;
-		V_train_sds[1] <- 1;
+// 		for (i in 1:nobs_train) V_train_std[i,1] <- V_train[i,1];
+// 		for (i in 1:nobs_test) V_test_std[i,1] <- V_test[i,1];
+// 		V_train_means[1] <- 1;
+// 		V_train_sds[1] <- 1;
 
 		// z-score remaining columns
-		if (ndpars > 1) {
-			for (i in 2:ndpars) {
-				// calculate means + sds
-				V_train_means[i] <- mean(col(V_train, i));
-				V_train_sds[i] <- sd(col(V_train, i));
+// 		if (ndpars > 1) {
+// 			for (i in 2:ndpars) {
+// 				// calculate means + sds
+// 				V_train_means[i] <- mean(col(V_train, i));
+// 				V_train_sds[i] <- sd(col(V_train, i));
 
-				// calculate z-scored values
-				for (j in 1:nobs_train) V_train_std[j,i] <- (V_train[j,i] - V_train_means[i]) / V_train_sds[i];
-				for (j in 1:nobs_test) V_test_std[j,i] <- (V_test[j,i] - V_train_means[i]) / V_train_sds[i];
-			}
-		}
-	}
+// 				// calculate z-scored values
+// 				for (j in 1:nobs_train) V_train_std[j,i] <- (V_train[j,i] - V_train_means[i]) / V_train_sds[i];
+// 				for (j in 1:nobs_test) V_test_std[j,i] <- (V_test[j,i] - V_train_means[i]) / V_train_sds[i];
+// 			}
+// 		}
+// 	}
 	
 	parameters {
 		vector[ndpars] dpars;
@@ -202,8 +202,8 @@ occu.stan.test.horseshoe.lin=function(control) {
 			// calculate opars using matt trick
 			opars <- ornorm .* olambda * otau;
 			
-			logit_psi_train <- X_train_std * opars;
-			logit_p_train <- V_train_std * dpars;
+			logit_psi_train <- X_train * opars;
+			logit_p_train <- V_train * dpars;
 			
 			for (i in 1:nsites_train) {
 				psi_train[i] <- inv_logit(logit_psi_train[i]);
@@ -276,8 +276,8 @@ occu.stan.test.horseshoe.lin=function(control) {
 			vector[nobs_test] logit_p_test;	
 			
 			// calculate psi_test and p_test
-			logit_psi_test <- X_test_std * opars;
-			logit_p_test <- V_test_std * dpars;
+			logit_psi_test <- X_test * opars;
+			logit_p_test <- V_test * dpars;
 			
 			for (i in 1:nsites_test) psi_test[i] <- inv_logit(logit_psi_test[i]);
 			for (i in 1:nobs_test) p_test[i] <- inv_logit(logit_p_test[i]);
