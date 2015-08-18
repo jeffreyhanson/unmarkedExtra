@@ -40,6 +40,8 @@ occu.stan=function(formula, data, test.data, knownOcc, method, control) {
 	## set default controls
 	if (is.null(control$gp))
 		control$gp=FALSE
+	if (is.null(control$horseshoe))
+		control$horseshoe=FALSE
 	control$data=list(
 		train.data=convertUMF(formula, data, knownOcc, control),
 		test.data=convertUMF(formula, test.data, knownOcc, control)
@@ -52,23 +54,23 @@ occu.stan=function(formula, data, test.data, knownOcc, method, control) {
 		)
 	} else {
 		if (is.null(test.data)) {
-			
 			control$data=control$data$train.data
 			return(occu.stan.lin(control))
 		} else {
-			return(occu.stan.test.lin(control))
+			if (control$horseshoe) {
+				return(occu.stan.test.horseshoe.lin(control))
+			} else {
+				return(occu.stan.test.ols.lin(control))
+			}
 		}
 	}
 }
 
-occu.stan.test.lin=function(control) {
+occu.stan.test.horseshoe.lin=function(control) {
 	## set priors
 	if (is.null(control$priors)) {
 		control$priors=list(
-			opars=Normal(0,10),
 			dpars=Normal(0,10),
-			psi_mean=Uniform(0,1),
-			p_mean=Uniform(0,1)
 		)
 	}
 	
@@ -323,8 +325,8 @@ occu.stan.test.lin=function(control) {
 	'	
 	)
 
-	if (is.null(options()$occu.stan.test.lin)) {
-		options(occu.stan.test.lin=stan_model(model_code=control$model_code))
+	if (is.null(options()$occu.stan.test.horseshoe.lin)) {
+		options(occu.stan.test.horseshoe.lin=stan_model(model_code=control$model_code))
 	}
 	
 	
@@ -333,12 +335,284 @@ occu.stan.test.lin=function(control) {
 		do.call(
 			sampling,
 			append(
-				list(object=options()$occu.stan.test.lin),
+				list(object=options()$occu.stan.test.horseshoe.lin),
 				control[!names(control) %in% c('gp','priors','model_code')]
 			)
 		)
 	)
 }
+
+
+
+occu.stan.test.ols.lin=function(control) {
+	## set priors
+	if (is.null(control$priors)) {
+		control$priors=list(
+			opars=Normal(0,10),
+			dpars=Normal(0,10),
+		)
+	}
+	
+	# set pars
+	names(control$data$train.data)=paste0(names(control$data$train.data), '_train')
+	names(control$data$test.data)=paste0(names(control$data$test.data), '_test')
+	control$data=append(control$data, control$data$train.data)
+	control$data=append(control$data, control$data$test.data)
+	control$data$nopars=control$data$nopars_train
+	control$data$ndpars=control$data$ndpars_train
+	control$data=control$data[-which(names(control$data) %in% c('train.data', 'test.data', 'nopars_train', 'nopars_test','ndpars_train', 'ndpars_test'))]
+	
+	## set parameters to return
+	if (is.null(control$pars))
+		control$pars=c(
+			'log_lik',
+			'dpars',
+			'opars',
+			'psi_test',
+			'p_test',
+			'sites_occupied_test',
+			'number_sites_occupied_test',
+			'fraction_sites_occupied_test'
+		)
+	
+	## parse code
+	control$model_code=paste0('
+	data {
+		int<lower=0> nobs_train; // number of total training observations
+		int<lower=0> nsites_train; // number of training sites
+
+		int<lower=0> nobs_test; // number of total test observations
+		int<lower=0> nsites_test; // number of test sites
+
+		int<lower=0> nopars; // number of parameters for observation model
+		int<lower=0> ndpars; // number of parameters for detection model
+		
+		int<lower=0,upper=1> y_train[nobs_train]; // observations
+		int<lower=1,upper=nobs_train> site_starts_train[nsites_train]; // index of first observation for i\'th site
+		int<lower=1,upper=nobs_train> site_visits_train[nsites_train]; // number of observations for i\'th site
+		
+		matrix[nsites_train,nopars] X_train; // design matrix for observation model
+		matrix[nobs_train,ndpars] V_train; // design matrix for detection model
+
+		matrix[nsites_test,nopars] X_test; // design matrix for observation model
+		matrix[nobs_test,ndpars] V_test; // design matrix for detection model
+	}
+	
+	transformed data {
+		// declare variables
+		int<lower=0> site_detections_train[nsites_train]; // number of detections per training site		
+		vector[nopars] X_train_means;
+		vector[nopars] X_train_sds;
+		vector[ndpars] V_train_means;
+		vector[ndpars] V_train_sds;
+		matrix[nsites_train,nopars] X_train_std;
+		matrix[nobs_train,ndpars] V_train_std;
+		matrix[nsites_test,nopars] X_test_std;
+		matrix[nobs_test,ndpars] V_test_std;
+		
+		// calculate number of detections per training site
+		for (i in 1:nsites_train)
+			site_detections_train[i] <- sum(
+				segment(
+					y_train,
+					site_starts_train[i],
+					site_visits_train[i]
+				)
+			);
+		
+		/// standardise site-level covariates
+		// first column is assumed to contain the intercept
+		for (i in 1:nsites_train) X_train_std[i,1] <- X_train[i,1];
+		for (i in 1:nsites_test) X_test_std[i,1] <- X_test[i,1];
+		X_train_means[1] <- 1;
+		X_train_sds[1] <- 1;
+		// z-score remaining columns
+		if (nopars > 1) {
+			for (i in 2:nopars) {
+				// calculate means + sds
+				X_train_means[i] <- mean(col(X_train, i));
+				X_train_sds[i] <- sd(col(X_train, i));
+				
+				// calculate z-scored values
+				for (j in 1:nsites_train) X_train_std[j,i] <- (X_train[j,i] - X_train_means[i]) / X_train_sds[i];
+				for (j in 1:nsites_test) X_test_std[j,i] <- (X_test[j,i] - X_train_means[i]) / X_train_means[i];
+			}
+		}
+		
+		/// standardise observation-level covariates
+		// first column is assumed to contain the intercept
+		for (i in 1:nobs_train) V_train_std[i,1] <- V_train[i,1];
+		for (i in 1:nobs_test) V_test_std[i,1] <- V_test[i,1];
+		V_train_means[1] <- 1;
+		V_train_sds[1] <- 1;
+
+		// z-score remaining columns
+		if (ndpars > 1) {
+			for (i in 2:ndpars) {
+				// calculate means + sds
+				V_train_means[i] <- mean(col(V_train, i));
+				V_train_sds[i] <- sd(col(V_train, i));
+
+				// calculate z-scored values
+				for (j in 1:nsites_train) V_train_std[j,i] <- (V_train[j,i] - V_train_means[i]) / V_train_sds[i];
+				for (j in 1:nsites_test) V_test_std[j,i] <- (V_test[j,i] - V_train_means[i]) / V_train_sds[i];
+			}
+		}
+	}
+	
+	parameters {
+		vector[ndpars] opars;
+		vector[ndpars] dpars;
+	}
+	
+	transformed parameters {
+		vector[nsites_train] log1m_psi_train;
+		vector[nsites_train] log_psi_train;
+		vector[nobs_train] logit_p_train;
+		
+		{
+			// declare internal variables
+			vector[nsites_train] logit_psi_train;
+			vector[nsites_train] psi_train;
+			
+			logit_psi_train <- X_train_std * opars;
+			logit_p_train <- V_train_std * dpars;
+			
+			for (i in 1:nsites_train) {
+				psi_train[i] <- inv_logit(logit_psi_train[i]);
+				log1m_psi_train[i] <- log1m(psi_train[i]);
+			}
+			log_psi_train <- log(psi_train);
+		}
+	}
+	
+	model {
+		// priors
+		dpars ~ ',repr(control$priors$dpars),';
+		opars ~ ',repr(control$priors$opars),';
+		
+		// likelihood
+		for (i in 1:nsites_train) {
+			if (site_detections_train[i] > 0)
+				increment_log_prob(
+					log_psi_train[i] + bernoulli_logit_log(
+						segment(
+							y_train, 
+							site_starts_train[i],
+							site_visits_train[i]
+						),
+						segment(
+							logit_p_train,
+							site_starts_train[i],
+							site_visits_train[i]
+						)
+					)
+				); 
+			else 
+				increment_log_prob(
+					log_sum_exp(
+						log_psi_train[i] + 
+						bernoulli_logit_log(
+							segment(
+								y_train, 
+								site_starts_train[i],
+								site_visits_train[i]
+							),
+							segment(
+								logit_p_train,
+								site_starts_train[i],
+								site_visits_train[i]
+							)
+						), 
+						log1m_psi_train[i]
+					)
+				);
+		}
+	}
+	
+	generated quantities {
+		vector[nsites_test] logit_psi_test;
+		vector[nobs_test] logit_p_test;	
+
+		real sites_occupied_test[nsites_test];
+		real number_sites_occupied_test;
+		real fraction_sites_occupied_test;
+
+		vector[nsites_test] psi_test;
+		vector[nobs_test] p_test;
+
+		vector[nsites_train] log_lik;
+	
+		// calculate psi_test and p_test
+		logit_psi_test <- X_test_std * opars;
+		logit_p_test <- V_test_std * dpars;
+		
+		for (i in 1:nsites_test)
+			psi_test[i] <- inv_logit(logit_psi_test[i]);
+		for (i in 1:nobs_test)
+			p_test[i] <- inv_logit(logit_p_test[i]);
+	
+		// site-level summaries		
+		for (i in 1:nsites_test)
+			sites_occupied_test[i] <- bernoulli_rng(psi_test[i]);
+		number_sites_occupied_test <- sum(sites_occupied_test);
+		fraction_sites_occupied_test <- number_sites_occupied_test / nsites_test;
+			
+		// log-likelihood
+		for (i in 1:nsites_train) {
+			if (site_detections_train[i] > 0) 
+				log_lik[i] <- log_psi_train[i] + bernoulli_logit_log(
+						segment(
+							y_train, 
+							site_starts_train[i],
+							site_visits_train[i]
+						),
+						segment(
+							logit_p_train,
+							site_starts_train[i],
+							site_visits_train[i]
+						)
+					); 
+			else 
+				log_lik[i] <- log_sum_exp(
+						log_psi_train[i] + 
+						bernoulli_logit_log(
+							segment(
+								y_train, 
+								site_starts_train[i],
+								site_visits_train[i]
+							),
+							segment(
+								logit_p_train,
+								site_starts_train[i],
+								site_visits_train[i]
+							)
+						), 
+						log1m_psi_train[i]
+					);
+		}
+	}
+	
+	'	
+	)
+
+	if (is.null(options()$occu.stan.test.ols.lin)) {
+		options(occu.stan.test.ols.lin=stan_model(model_code=control$model_code))
+	}
+	
+	
+	## run model
+	return(
+		do.call(
+			sampling,
+			append(
+				list(object=options()$occu.stan.test.ols.lin),
+				control[!names(control) %in% c('gp','priors','model_code')]
+			)
+		)
+	)
+}
+
 
 
 occu.stan.lin=function(control) {
