@@ -333,7 +333,7 @@ occu.stan.test.horseshoe.lin=function(control) {
 			sampling,
 			append(
 				list(object=options()$occu.stan.test.horseshoe.lin),
-				control[!names(control) %in% c('gp','priors','model_code')]
+				control[!names(control) %in% c('gp','priors','model_code','horseshoe')]
 			)
 		)
 	)
@@ -458,7 +458,7 @@ occu.stan.test.ols.lin=function(control) {
 	}
 	
 	parameters {
-		vector[ndpars] opars;
+		vector[nopars] opars;
 		vector[ndpars] dpars;
 	}
 	
@@ -544,14 +544,11 @@ occu.stan.test.ols.lin=function(control) {
 		logit_psi_test <- X_test_std * opars;
 		logit_p_test <- V_test_std * dpars;
 		
-		for (i in 1:nsites_test)
-			psi_test[i] <- inv_logit(logit_psi_test[i]);
-		for (i in 1:nobs_test)
-			p_test[i] <- inv_logit(logit_p_test[i]);
+		for (i in 1:nsites_test) psi_test[i] <- inv_logit(logit_psi_test[i]);
+		for (i in 1:nobs_test) p_test[i] <- inv_logit(logit_p_test[i]);
 	
 		// site-level summaries		
-		for (i in 1:nsites_test)
-			sites_occupied_test[i] <- bernoulli_rng(psi_test[i]);
+		for (i in 1:nsites_test) sites_occupied_test[i] <- bernoulli_rng(psi_test[i]);
 		number_sites_occupied_test <- sum(sites_occupied_test);
 		fraction_sites_occupied_test <- number_sites_occupied_test / nsites_test;
 			
@@ -604,7 +601,7 @@ occu.stan.test.ols.lin=function(control) {
 			sampling,
 			append(
 				list(object=options()$occu.stan.test.ols.lin),
-				control[!names(control) %in% c('gp','priors','model_code')]
+				control[!names(control) %in% c('gp','priors','model_code','horseshoe')]
 			)
 		)
 	)
