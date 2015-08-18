@@ -276,14 +276,11 @@ occu.stan.test.horseshoe.lin=function(control) {
 		logit_psi_test <- X_test_std * opars;
 		logit_p_test <- V_test_std * dpars;
 		
-		for (i in 1:nsites_test)
-			psi_test[i] <- inv_logit(logit_psi_test[i]);
-		for (i in 1:nobs_test)
-			p_test[i] <- inv_logit(logit_p_test[i]);
+		for (i in 1:nsites_test) psi_test[i] <- inv_logit(logit_psi_test[i]);
+		for (i in 1:nobs_test) p_test[i] <- inv_logit(logit_p_test[i]);
 	
 		// site-level summaries		
-		for (i in 1:nsites_test)
-			sites_occupied_test[i] <- bernoulli_rng(psi_test[i]);
+		for (i in 1:nsites_test) sites_occupied_test[i] <- bernoulli_rng(psi_test[i]);
 		number_sites_occupied_test <- sum(sites_occupied_test);
 		fraction_sites_occupied_test <- number_sites_occupied_test / nsites_test;
 			
