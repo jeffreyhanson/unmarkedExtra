@@ -87,11 +87,6 @@ occu.stan.test.lin=function(control) {
 			'log_lik',
 			'dpars',
 			'opars',
-			'psi_train',
-			'p_train',
-			'sites_occupied_train',
-			'number_sites_occupied_train',
-			'fraction_sites_occupied_train',
 			'psi_test',
 			'p_test',
 			'sites_occupied_test',
@@ -123,7 +118,18 @@ occu.stan.test.lin=function(control) {
 	}
 	
 	transformed data {
-		int<lower=0> site_detections_train[nsites_train]; // number of detections per site
+		// declare variables
+		int<lower=0> site_detections_train[nsites_train]; // number of detections per training site		
+		vector[nopars] X_train_means;
+		vector[nopars] X_train_sds;
+		vector[ndpars] V_train_means;
+		vector[ndpars] V_train_sds;
+		matrix[nsites_train,nopars] X_train_std;
+		matrix[nobs_train,ndpars] V_train_std;
+		matrix[nsites_test,nopars] X_test_std;
+		matrix[nobs_test,ndpars] V_test_std;
+		
+		// calculate number of detections per training site
 		for (i in 1:nsites_train)
 			site_detections_train[i] <- sum(
 				segment(
@@ -132,36 +138,86 @@ occu.stan.test.lin=function(control) {
 					site_visits_train[i]
 				)
 			);
+		
+		/// standardise site-level covariates
+		// first column is assumed to contain the intercept
+		for (i in 1:nsites_train) X_train_std[i,1] <- X_train[i,1];
+		for (i in 1:nsites_test) X_test_std[i,1] <- X_test[i,1];
+		X_train_means[1] <- 1;
+		X_train_sds[1] <- 1;
+		// z-score remaining columns
+		if (nopars > 1) {
+			for (i in 2:nopars) {
+				// calculate means + sds
+				X_train_means[i] <- mean(col(X_train, i));
+				X_train_sds[i] <- sd(col(X_train, i));
+				
+				// calculate z-scored values
+				for (j in 1:nsites_train) X_train_std[j,i] <- (X_train[j,i] - X_train_means[i]) / X_train_sds[i];
+				for (j in 1:nsites_test) X_test_std[j,i] <- (X_test[j,i] - X_train_means[i]) / X_train_means[i];
+			}
+		}
+		
+		/// standardise observation-level covariates
+		// first column is assumed to contain the intercept
+		for (i in 1:nobs_train) V_train_std[i,1] <- V_train[i,1];
+		for (i in 1:nobs_test) V_test_std[i,1] <- V_test[i,1];
+		V_train_means[1] <- 1;
+		V_train_sds[1] <- 1;
+
+		// z-score remaining columns
+		if (ndpars > 1) {
+			for (i in 2:ndpars) {
+				// calculate means + sds
+				V_train_means[i] <- mean(col(V_train, i));
+				V_train_sds[i] <- sd(col(V_train, i));
+
+				// calculate z-scored values
+				for (j in 1:nsites_train) V_train_std[j,i] <- (V_train[j,i] - V_train_means[i]) / V_train_sds[i];
+				for (j in 1:nsites_test) V_test_std[j,i] <- (V_test[j,i] - V_train_means[i]) / V_train_sds[i];
+			}
+		}
 	}
 	
 	parameters {
 		vector[ndpars] dpars;
-		vector[nopars] opars;
+		vector[nopars] ornorm;
+		real<lower=0> otau;
+		vector<lower=0>[nopars] olambda;		
 	}
 	
 	transformed parameters {
-		vector[nsites_train] logit_psi_train;
-		vector[nobs_train] logit_p_train;
-		vector[nsites_train] psi_train;
-		
+		vector[nopars] opars;
 		vector[nsites_train] log1m_psi_train;
 		vector[nsites_train] log_psi_train;
-	
-		logit_psi_train <- X_train * opars;
-		logit_p_train <- V_train * dpars;
+		vector[nobs_train] logit_p_train;
 		
-		for (i in 1:nsites_train) {
-			psi_train[i] <- inv_logit(logit_psi_train[i]);
-			log1m_psi_train[i] <- log1m(psi_train[i]);
+		{
+			// declare internal variables
+			vector[nsites_train] logit_psi_train;
+			vector[nsites_train] psi_train;
+
+			// calculate opars using matt trick
+			opars <- ornorm .* olambda * otau;
+			
+			logit_psi_train <- X_train_std * opars;
+			logit_p_train <- V_train_std * dpars;
+			
+			for (i in 1:nsites_train) {
+				psi_train[i] <- inv_logit(logit_psi_train[i]);
+				log1m_psi_train[i] <- log1m(psi_train[i]);
+			}
+			log_psi_train <- log(psi_train);
 		}
-		log_psi_train <- log(psi_train);
 	}
 	
 	model {
 		// priors
 		dpars ~ ',repr(control$priors$dpars),';
-		opars ~ ',repr(control$priors$opars),';
-
+		ornorm ~ normal(0, 1);
+		olambda ~ cauchy(0, 1);
+		otau ~ cauchy(0, 1);
+		
 		// likelihood
 		for (i in 1:nsites_train) {
 			if (site_detections_train[i] > 0)
@@ -211,33 +267,19 @@ occu.stan.test.lin=function(control) {
 
 		vector[nsites_test] psi_test;
 		vector[nobs_test] p_test;
-		
-		vector[nobs_train] p_train;	
-		real sites_occupied_train[nsites_train];
-		real number_sites_occupied_train;
-		real fraction_sites_occupied_train;
-		
+
 		vector[nsites_train] log_lik;
 	
-		// calculate p_train
-		for (i in 1:nobs_train)
-			p_train[i] <- inv_logit(logit_p_train[i]);
-	
 		// calculate psi_test and p_test
-		logit_psi_test <- X_test * opars;
-		logit_p_test <- V_test * dpars;
+		logit_psi_test <- X_test_std * opars;
+		logit_p_test <- V_test_std * dpars;
 		
 		for (i in 1:nsites_test)
 			psi_test[i] <- inv_logit(logit_psi_test[i]);
 		for (i in 1:nobs_test)
 			p_test[i] <- inv_logit(logit_p_test[i]);
 	
-		// site-level summaries
-		for (i in 1:nsites_train)
-			sites_occupied_train[i] <- bernoulli_rng(psi_train[i]);
-		number_sites_occupied_train <- sum(sites_occupied_train);
-		fraction_sites_occupied_train <- number_sites_occupied_train / nsites_train;
-			
+		// site-level summaries		
 		for (i in 1:nsites_test)
 			sites_occupied_test[i] <- bernoulli_rng(psi_test[i]);
 		number_sites_occupied_test <- sum(sites_occupied_test);

@@ -43,12 +43,12 @@ test_that("stan linear solver doesn't work", {
 	n.sites=50
 	n.visits=10
 	o.int=2
-	o.slope=2
+	o.slope=c(2, 5)
 	d.int=1
 	
 	# generate design matrices
-	o.covs=data.frame(sitevar=rnorm(n.sites))
-	o.form=~sitevar
+	o.covs=data.frame(sitevar=rnorm(n.sites), sitevar2=rnorm(n.sites, 5, 10))
+	o.form=~sitevar+sitevar2
 	d.covs=data.frame(obsvar=rnorm(n.sites*n.visits))
 	d.form=~1
 	
@@ -76,7 +76,7 @@ test_that("stan linear solver doesn't work", {
 	)
 
 	# run using optim
-	m1=unmarked::occu(~1 ~sitevar, data=trainUMF, method='BFGS')
+	m1=unmarked::occu(~1 ~sitevar+sitevar2, data=trainUMF, method='BFGS')
 	m1.coef=coef(m1)
 	
 	# run using stan
@@ -87,7 +87,7 @@ test_that("stan linear solver doesn't work", {
 		.Names=names(m1.coef)
 	)
 	
-	m3=unmarkedExtra::occu(~1 ~sitevar, data=trainUMF, test.data=testUMF, method='stan', control=list(iter=2000, seed=500))
+	m3=unmarkedExtra::occu(~1 ~sitevar+sitevar2, data=trainUMF, test.data=testUMF, method='stan', control=list(iter=2000, seed=500))
 	m3.samples=extract(m3, c('dpars','opars'))
 	m3.coef=structure(
 		c(colMeans(m3.samples[[2]]), mean(m3.samples[[1]][[1]])),
