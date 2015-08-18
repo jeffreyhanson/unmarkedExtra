@@ -179,7 +179,7 @@ occu.stan.test.horseshoe.lin=function(control) {
 // 				for (j in 1:nobs_test) V_test_std[j,i] <- (V_test[j,i] - V_train_means[i]) / V_train_sds[i];
 // 			}
 // 		}
-// 	}
+ 	}
 	
 	parameters {
 		vector[ndpars] dpars;
