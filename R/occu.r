@@ -186,8 +186,8 @@ occu.stan.test.horseshoe.lin=function(control) {
 	parameters {
 		vector[ndpars] dpars;
 		vector[nopars] ornorm;
-		// real<lower=0> otau;
-		// vector<lower=0>[nopars] olambda;
+		real<lower=0> otau;
+		vector<lower=0>[nopars] olambda;
 	}
 	
 	transformed parameters {
@@ -202,9 +202,9 @@ occu.stan.test.horseshoe.lin=function(control) {
 			vector[nsites_train] psi_train;
 
 			// calculate opars using matt trick
-//			opars <- ornorm .* olambda * otau;
+			opars <- ornorm .* olambda * otau;
 			
-			logit_psi_train <- X_train * ornorm;
+			logit_psi_train <- X_train * opars;
 			logit_p_train <- V_train * dpars;
 			
 			for (i in 1:nsites_train) {
@@ -219,8 +219,8 @@ occu.stan.test.horseshoe.lin=function(control) {
 		// priors
 		dpars ~ ',repr(control$priors$dpars),';
 		ornorm ~ normal(0, 1);
-		// olambda ~ cauchy(0, 1);
-		// otau ~ cauchy(0, 1);
+		olambda ~ cauchy(0, 1);
+		otau ~ cauchy(0, 1);
 		
 		// likelihood
 		for (i in 1:nsites_train) {
