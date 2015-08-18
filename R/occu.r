@@ -346,7 +346,7 @@ occu.stan.test.ols.lin=function(control) {
 	if (is.null(control$priors)) {
 		control$priors=list(
 			opars=Normal(0,10),
-			dpars=Normal(0,10),
+			dpars=Normal(0,10)
 		)
 	}
 	
