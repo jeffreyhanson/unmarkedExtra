@@ -142,8 +142,8 @@ occu.stan.test.horseshoe.lin=function(control) {
 				)
 			);
 		
-		/// standardise site-level covariates
-		// first column is assumed to contain the intercept
+//		/// standardise site-level covariates
+//		// first column is assumed to contain the intercept
 //		for (i in 1:nsites_train) X_train_std[i,1] <- X_train[i,1];
 //		for (i in 1:nsites_test) X_test_std[i,1] <- X_test[i,1];
 //		X_train_means[1] <- 1;
@@ -202,9 +202,9 @@ occu.stan.test.horseshoe.lin=function(control) {
 			vector[nsites_train] psi_train;
 
 			// calculate opars using matt trick
-			opars <- ornorm; // .* olambda * otau;
+			// opars <- ornorm; // .* olambda * otau;
 			
-			logit_psi_train <- X_train * opars;
+			logit_psi_train <- X_train * ornorm;
 			logit_p_train <- V_train * dpars;
 			
 			for (i in 1:nsites_train) {
@@ -219,8 +219,8 @@ occu.stan.test.horseshoe.lin=function(control) {
 		// priors
 		dpars ~ ',repr(control$priors$dpars),';
 		ornorm ~ normal(0, 1);
-		olambda ~ cauchy(0, 1);
-		otau ~ cauchy(0, 1);
+		// olambda ~ cauchy(0, 1);
+		// otau ~ cauchy(0, 1);
 		
 		// likelihood
 		for (i in 1:nsites_train) {
