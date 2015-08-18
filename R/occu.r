@@ -811,13 +811,13 @@ occu.nloptr=function(formula, data, knownOcc, method, control) {
 	nd <- ifelse(rowSums(y, na.rm = TRUE) == 0, 1, 0) # number of sites where spp not detected
 	# main processing
 	if (identical(control$engine, "C")) {
-		control$eval_f <- function(params) {
+		control$fn <- function(params) {
 			beta.psi <- params[1:nOP]
 			beta.p <- params[(nOP + 1):nP]
 			.Call("nll_occu", yvec, X, V, beta.psi, beta.p, nd, knownOccLog, navec, X.offset, V.offset, PACKAGE = "unmarked")
 		}
 	} else {
-		control$eval_f <- function(params) {
+		control$fn <- function(params) {
 			psi <- plogis(X %*% params[1:nOP] + X.offset)
 			psi[knownOccLog] <- 1
 			pvec <- plogis(V %*% params[(nOP + 1):nP] + V.offset)
@@ -830,10 +830,10 @@ occu.nloptr=function(formula, data, knownOcc, method, control) {
 	}
 	if (is.null(control$starts))
 		control$starts <- rep(0, nP)
-	control$opts=list(algorithm=method, xtol_rel=1.0e-10, maxeval=100000)
-	control$x0=control$starts
+	control$control=list(maxfun=100000, rhobeg=1)
+	control$par=control$starts
 	fm <- do.call(
-		nloptr,
+		 newuoa,
 		control[!names(control) %in% c('engine', 'hessian', 'starts')]
 	)
 		

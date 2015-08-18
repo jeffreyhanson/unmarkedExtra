@@ -20,10 +20,10 @@ test_that("nloptr solver doesn't work", {
 	# run using unmarked
 	set.seed(500)
 	m1=unmarked::occu(~ obsvar1 ~ 1, pferUMF, method='BFGS')
-	
+		q
 	# run using unmarkedExtra
 	set.seed(500)
-	m2=unmarkedExtra::occu(~ obsvar1 ~ 1, pferUMF, method='NLOPT_LN_NEWUOA')
+	m2=unmarkedExtra::occu(~ obsvar1 ~ 1, pferUMF, method='NLOPT_LN_NEWUOA', hessian=FALSE)
 	
 	# test if answers are the same
 	expect_identical(m1@estimates,m2@estimates)
