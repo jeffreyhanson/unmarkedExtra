@@ -260,9 +260,7 @@ occu.stan.test.horseshoe.lin=function(control) {
 	}
 	
 	generated quantities {
-		vector[nsites_test] logit_psi_test;
-		vector[nobs_test] logit_p_test;	
-
+		// global variables
 		real sites_occupied_test[nsites_test];
 		real number_sites_occupied_test;
 		real fraction_sites_occupied_test;
@@ -271,38 +269,28 @@ occu.stan.test.horseshoe.lin=function(control) {
 		vector[nobs_test] p_test;
 
 		vector[nsites_train] log_lik;
-	
-		// calculate psi_test and p_test
-		logit_psi_test <- X_test_std * opars;
-		logit_p_test <- V_test_std * dpars;
-		
-		for (i in 1:nsites_test) psi_test[i] <- inv_logit(logit_psi_test[i]);
-		for (i in 1:nobs_test) p_test[i] <- inv_logit(logit_p_test[i]);
-	
-		// site-level summaries		
-		for (i in 1:nsites_test) sites_occupied_test[i] <- bernoulli_rng(psi_test[i]);
-		number_sites_occupied_test <- sum(sites_occupied_test);
-		fraction_sites_occupied_test <- number_sites_occupied_test / nsites_test;
+
+		{
+			// local variables
+			vector[nsites_test] logit_psi_test;
+			vector[nobs_test] logit_p_test;	
 			
-		// log-likelihood
-		for (i in 1:nsites_train) {
-			if (site_detections_train[i] > 0) 
-				log_lik[i] <- log_psi_train[i] + bernoulli_logit_log(
-						segment(
-							y_train, 
-							site_starts_train[i],
-							site_visits_train[i]
-						),
-						segment(
-							logit_p_train,
-							site_starts_train[i],
-							site_visits_train[i]
-						)
-					); 
-			else 
-				log_lik[i] <- log_sum_exp(
-						log_psi_train[i] + 
-						bernoulli_logit_log(
+			// calculate psi_test and p_test
+			logit_psi_test <- X_test_std * opars;
+			logit_p_test <- V_test_std * dpars;
+			
+			for (i in 1:nsites_test) psi_test[i] <- inv_logit(logit_psi_test[i]);
+			for (i in 1:nobs_test) p_test[i] <- inv_logit(logit_p_test[i]);
+		
+			// site-level summaries		
+			for (i in 1:nsites_test) sites_occupied_test[i] <- bernoulli_rng(psi_test[i]);
+			number_sites_occupied_test <- sum(sites_occupied_test);
+			fraction_sites_occupied_test <- number_sites_occupied_test / nsites_test;
+				
+			// log-likelihood
+			for (i in 1:nsites_train) {
+				if (site_detections_train[i] > 0) 
+					log_lik[i] <- log_psi_train[i] + bernoulli_logit_log(
 							segment(
 								y_train, 
 								site_starts_train[i],
@@ -313,9 +301,25 @@ occu.stan.test.horseshoe.lin=function(control) {
 								site_starts_train[i],
 								site_visits_train[i]
 							)
-						), 
-						log1m_psi_train[i]
-					);
+						); 
+				else 
+					log_lik[i] <- log_sum_exp(
+							log_psi_train[i] + 
+							bernoulli_logit_log(
+								segment(
+									y_train, 
+									site_starts_train[i],
+									site_visits_train[i]
+								),
+								segment(
+									logit_p_train,
+									site_starts_train[i],
+									site_visits_train[i]
+								)
+							), 
+							log1m_psi_train[i]
+						);
+			}
 		}
 	}
 	
@@ -528,9 +532,7 @@ occu.stan.test.ols.lin=function(control) {
 	}
 	
 	generated quantities {
-		vector[nsites_test] logit_psi_test;
-		vector[nobs_test] logit_p_test;	
-
+		// global variables
 		real sites_occupied_test[nsites_test];
 		real number_sites_occupied_test;
 		real fraction_sites_occupied_test;
@@ -539,38 +541,28 @@ occu.stan.test.ols.lin=function(control) {
 		vector[nobs_test] p_test;
 
 		vector[nsites_train] log_lik;
-	
-		// calculate psi_test and p_test
-		logit_psi_test <- X_test_std * opars;
-		logit_p_test <- V_test_std * dpars;
-		
-		for (i in 1:nsites_test) psi_test[i] <- inv_logit(logit_psi_test[i]);
-		for (i in 1:nobs_test) p_test[i] <- inv_logit(logit_p_test[i]);
-	
-		// site-level summaries		
-		for (i in 1:nsites_test) sites_occupied_test[i] <- bernoulli_rng(psi_test[i]);
-		number_sites_occupied_test <- sum(sites_occupied_test);
-		fraction_sites_occupied_test <- number_sites_occupied_test / nsites_test;
+
+		{
+			// local variables
+			vector[nsites_test] logit_psi_test;
+			vector[nobs_test] logit_p_test;	
 			
-		// log-likelihood
-		for (i in 1:nsites_train) {
-			if (site_detections_train[i] > 0) 
-				log_lik[i] <- log_psi_train[i] + bernoulli_logit_log(
-						segment(
-							y_train, 
-							site_starts_train[i],
-							site_visits_train[i]
-						),
-						segment(
-							logit_p_train,
-							site_starts_train[i],
-							site_visits_train[i]
-						)
-					); 
-			else 
-				log_lik[i] <- log_sum_exp(
-						log_psi_train[i] + 
-						bernoulli_logit_log(
+			// calculate psi_test and p_test
+			logit_psi_test <- X_test_std * opars;
+			logit_p_test <- V_test_std * dpars;
+			
+			for (i in 1:nsites_test) psi_test[i] <- inv_logit(logit_psi_test[i]);
+			for (i in 1:nobs_test) p_test[i] <- inv_logit(logit_p_test[i]);
+		
+			// site-level summaries		
+			for (i in 1:nsites_test) sites_occupied_test[i] <- bernoulli_rng(psi_test[i]);
+			number_sites_occupied_test <- sum(sites_occupied_test);
+			fraction_sites_occupied_test <- number_sites_occupied_test / nsites_test;
+				
+			// log-likelihood
+			for (i in 1:nsites_train) {
+				if (site_detections_train[i] > 0) 
+					log_lik[i] <- log_psi_train[i] + bernoulli_logit_log(
 							segment(
 								y_train, 
 								site_starts_train[i],
@@ -581,9 +573,25 @@ occu.stan.test.ols.lin=function(control) {
 								site_starts_train[i],
 								site_visits_train[i]
 							)
-						), 
-						log1m_psi_train[i]
-					);
+						); 
+				else 
+					log_lik[i] <- log_sum_exp(
+							log_psi_train[i] + 
+							bernoulli_logit_log(
+								segment(
+									y_train, 
+									site_starts_train[i],
+									site_visits_train[i]
+								),
+								segment(
+									logit_p_train,
+									site_starts_train[i],
+									site_visits_train[i]
+								)
+							), 
+							log1m_psi_train[i]
+						);
+			}
 		}
 	}
 	
