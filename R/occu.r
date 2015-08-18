@@ -70,7 +70,7 @@ occu.stan.test.horseshoe.lin=function(control) {
 	## set priors
 	if (is.null(control$priors)) {
 		control$priors=list(
-			dpars=Normal(0,10),
+			dpars=Normal(0,10)
 		)
 	}
 	
